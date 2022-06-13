@@ -543,75 +543,75 @@ func (srv *Server) setupDiscovery() error {
 			added[proto.Name] = true
 		}
 	}
-
-	// Don't listen on UDP endpoint if DHT is disabled.
-	if srv.NoDiscovery && !srv.DiscoveryV5 {
-		return nil
-	}
-
-	addr, err := net.ResolveUDPAddr("udp", srv.ListenAddr)
-	if err != nil {
-		return err
-	}
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		return err
-	}
-	realaddr := conn.LocalAddr().(*net.UDPAddr)
-	srv.log.Debug("UDP listener up", "addr", realaddr)
-	if srv.NAT != nil {
-		if !realaddr.IP.IsLoopback() {
-			srv.loopWG.Add(1)
-			go func() {
-				nat.Map(srv.NAT, srv.quit, "udp", realaddr.Port, realaddr.Port, "ethereum discovery")
-				srv.loopWG.Done()
-			}()
-		}
-	}
-	srv.localnode.SetFallbackUDP(realaddr.Port)
-
-	// Discovery V4
-	var unhandled chan discover.ReadPacket
-	var sconn *sharedUDPConn
-	if !srv.NoDiscovery {
-		if srv.DiscoveryV5 {
-			unhandled = make(chan discover.ReadPacket, 100)
-			sconn = &sharedUDPConn{conn, unhandled}
-		}
-		cfg := discover.Config{
-			PrivateKey:  srv.PrivateKey,
-			NetRestrict: srv.NetRestrict,
-			Bootnodes:   srv.BootstrapNodes,
-			Unhandled:   unhandled,
-			Log:         srv.log,
-		}
-		ntab, err := discover.ListenV4(conn, srv.localnode, cfg)
-		if err != nil {
-			return err
-		}
-		srv.ntab = ntab
-		srv.discmix.AddSource(ntab.RandomNodes())
-	}
-
-	// Discovery V5
-	if srv.DiscoveryV5 {
-		cfg := discover.Config{
-			PrivateKey:  srv.PrivateKey,
-			NetRestrict: srv.NetRestrict,
-			Bootnodes:   srv.BootstrapNodesV5,
-			Log:         srv.log,
-		}
-		var err error
-		if sconn != nil {
-			srv.DiscV5, err = discover.ListenV5(sconn, srv.localnode, cfg)
-		} else {
-			srv.DiscV5, err = discover.ListenV5(conn, srv.localnode, cfg)
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	// xdag disable p2p discovery
+	//// Don't listen on UDP endpoint if DHT is disabled.
+	//if srv.NoDiscovery && !srv.DiscoveryV5 {
+	//	return nil
+	//}
+	//
+	//addr, err := net.ResolveUDPAddr("udp", srv.ListenAddr)
+	//if err != nil {
+	//	return err
+	//}
+	//conn, err := net.ListenUDP("udp", addr)
+	//if err != nil {
+	//	return err
+	//}
+	//realaddr := conn.LocalAddr().(*net.UDPAddr)
+	//srv.log.Debug("UDP listener up", "addr", realaddr)
+	//if srv.NAT != nil {
+	//	if !realaddr.IP.IsLoopback() {
+	//		srv.loopWG.Add(1)
+	//		go func() {
+	//			nat.Map(srv.NAT, srv.quit, "udp", realaddr.Port, realaddr.Port, "ethereum discovery")
+	//			srv.loopWG.Done()
+	//		}()
+	//	}
+	//}
+	//srv.localnode.SetFallbackUDP(realaddr.Port)
+	//
+	//// Discovery V4
+	//var unhandled chan discover.ReadPacket
+	//var sconn *sharedUDPConn
+	//if !srv.NoDiscovery {
+	//	if srv.DiscoveryV5 {
+	//		unhandled = make(chan discover.ReadPacket, 100)
+	//		sconn = &sharedUDPConn{conn, unhandled}
+	//	}
+	//	cfg := discover.Config{
+	//		PrivateKey:  srv.PrivateKey,
+	//		NetRestrict: srv.NetRestrict,
+	//		Bootnodes:   srv.BootstrapNodes,
+	//		Unhandled:   unhandled,
+	//		Log:         srv.log,
+	//	}
+	//	ntab, err := discover.ListenV4(conn, srv.localnode, cfg)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	srv.ntab = ntab
+	//	srv.discmix.AddSource(ntab.RandomNodes())
+	//}
+	//
+	//// Discovery V5
+	//if srv.DiscoveryV5 {
+	//	cfg := discover.Config{
+	//		PrivateKey:  srv.PrivateKey,
+	//		NetRestrict: srv.NetRestrict,
+	//		Bootnodes:   srv.BootstrapNodesV5,
+	//		Log:         srv.log,
+	//	}
+	//	var err error
+	//	if sconn != nil {
+	//		srv.DiscV5, err = discover.ListenV5(sconn, srv.localnode, cfg)
+	//	} else {
+	//		srv.DiscV5, err = discover.ListenV5(conn, srv.localnode, cfg)
+	//	}
+	//	if err != nil {
+	//		return err
+	//	}
+	//}
+	return nil // xdag disable p2p discovery
 }
 
 func (srv *Server) setupDialScheduler() {
@@ -802,9 +802,11 @@ running:
 
 func (srv *Server) postHandshakeChecks(peers map[enode.ID]*Peer, inboundCount int, c *conn) error {
 	switch {
-	case !c.is(trustedConn) && len(peers) >= srv.MaxPeers:
+	case !c.is(trustedConn): // xdag
+		return DiscNetworkError
+	case c.is(trustedConn) && len(peers) >= srv.MaxPeers: // xdag
 		return DiscTooManyPeers
-	case !c.is(trustedConn) && c.is(inboundConn) && inboundCount >= srv.maxInboundConns():
+	case c.is(trustedConn) && c.is(inboundConn) && inboundCount >= srv.maxInboundConns(): // xdag
 		return DiscTooManyPeers
 	case peers[c.node.ID()] != nil:
 		return DiscAlreadyConnected
